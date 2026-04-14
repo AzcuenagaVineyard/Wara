@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WARA — New Holland TT3880F</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #f7f6f3;
+  --surface:  #ffffff;
+  --border:   #e2e0d8;
+  --text:     #1a1a18;
+  --muted:    #6b6b65;
+  --accent:   #2c6e3f;
+  --accent2:  #e8f5ed;
+  --warn:     #b85c00;
+  --warnbg:   #fff3e8;
+  --radius:   10px;
+  --shadow:   0 1px 3px rgba(0,0,0,.08);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+       background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+header { background: var(--surface); border-bottom: 1px solid var(--border);
+         padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 17px; font-weight: 600; }
+header span { font-size: 12px; color: var(--muted); }
+#status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+#status-dot.ok  { background: #2c6e3f; }
+#status-dot.err { background: #c0392b; }
+
+nav { background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 24px; display: flex; gap: 4px; }
+nav button { padding: 10px 16px; border: none; background: none; cursor: pointer;
+             font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent;
+             transition: color .15s; }
+nav button:hover  { color: var(--text); }
+nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin-bottom: 24px; }
+.card  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+         padding: 14px 16px; }
+.card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.card-value { font-size: 24px; font-weight: 600; margin-top: 2px; }
+.card-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.section { background: var(--surface); border: 1px solid var(--border);
+           border-radius: var(--radius); padding: 18px; margin-bottom: 20px; }
+.section h2 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 11px; font-weight: 500; color: var(--muted); text-align: left;
+     padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid #f0eeea; font-size: 13px; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafaf8; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 500; }
+.badge-green  { background: var(--accent2); color: var(--accent); }
+.badge-warn   { background: var(--warnbg);  color: var(--warn); }
+.badge-gray   { background: #f0eeea;        color: var(--muted); }
+
+.chart-wrap { position: relative; height: 220px; }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+.filter-row label { font-size: 12px; color: var(--muted); }
+.filter-row select, .filter-row input[type=number] {
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; background: var(--surface); color: var(--text); }
+
+.insight { background: var(--accent2); border-left: 3px solid var(--accent);
+           border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; }
+.insight.warn { background: var(--warnbg); border-left-color: var(--warn); }
+
+#loading { text-align: center; padding: 60px; color: var(--muted); }
+#error-msg { background: #fdecea; border: 1px solid #f5c6c6; border-radius: var(--radius);
+             padding: 16px; margin: 24px 0; font-size: 13px; color: #7b1c1c; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status-dot"></div>
+  <h1>New Holland TT3880F</h1>
+  <span id="db-info">Conectando…</span>
+</header>
+
+<nav>
+  <button class="active" onclick="showTab('resumen')">Resumen</button>
+  <button onclick="showTab('diario')">Diario</button>
+  <button onclick="showTab('inactividad')">Inactividad</button>
+  <button onclick="showTab('sectores')">Sectores</button>
+  <button onclick="showTab('patrones')">Patrones</button>
+</nav>
+
+<main>
+  <div id="loading">Cargando datos…</div>
+  <div id="error-msg" style="display:none"></div>
+
+  <!-- TAB: RESUMEN -->
+  <div id="tab-resumen" class="tab-content">
+    <div class="cards" id="cards-resumen"></div>
+    <div class="section">
+      <h2>Distancia por día (km)</h2>
+      <div class="chart-wrap"><canvas id="chart-dist"></canvas></div>
+    </div>
+    <div class="section">
+      <h2>Movimiento vs Inactividad (minutos)</h2>
+      <div class="chart-wrap"><canvas id="chart-mov-idle"></canvas></div>
+    </div>
+  </div>
+
+  <!-- TAB: DIARIO -->
+  <div id="tab-diario" class="tab-content">
+    <div class="filter-row">
+      <label>Últimos</label>
+      <input type="number" id="days-filter" value="30" min="1" max="365" style="width:70px">
+      <label>días registrados</label>
+    </div>
+    <div class="section">
+      <h2>Actividad diaria</h2>
+      <table id="tbl-diario">
+        <thead><tr>
+          <th>Fecha</th><th>Día</th><th>Arranca</th><th>Termina</th>
+          <th>Mov (min)</th><th>Inact (min)</th><th>% Inact</th>
+          <th>Dist (km)</th><th>Vel máx</th><th>Km/hra mov</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: INACTIVIDAD -->
+  <div id="tab-inactividad" class="tab-content">
+    <div class="cards" id="cards-inact"></div>
+    <div id="insights-inact"></div>
+    <div class="section">
+      <h2>Inactividad % por día de la semana</h2>
+      <div class="chart-wrap"><canvas id="chart-idle-dow"></canvas></div>
+    </div>
+    <div class="section">
+      <h2>Detenciones más largas</h2>
+      <table id="tbl-stops">
+        <thead><tr>
+          <th>Fecha</th><th>Hora</th><th>Duración (min)</th><th>Lugar</th><th>Sector</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: SECTORES -->
+  <div id="tab-sectores" class="tab-content">
+    <div class="section">
+      <h2>Tiempo total de detenciones por sector (min)</h2>
+      <div class="chart-wrap" style="height:280px"><canvas id="chart-sectors"></canvas></div>
+    </div>
+    <div class="section">
+      <h2>Detalle por sector</h2>
+      <table id="tbl-sectors">
+        <thead><tr>
+          <th>Sector</th><th>Nº paradas</th><th>Total (min)</th><th>Promedio (min)</th><th>Máx (min)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: PATRONES -->
+  <div id="tab-patrones" class="tab-content">
+    <div class="section">
+      <h2>Uso por día de la semana</h2>
+      <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
+    </div>
+    <div class="section">
+      <h2>Hora de arranque y término</h2>
+      <div class="chart-wrap"><canvas id="chart-hours"></canvas></div>
+    </div>
+    <div id="insights-patrones"></div>
+  </div>
+</main>
+
+<script>
+const API = 'http://localhost:8765';
+let DB = { summary: [], stops: [] };
+let charts = {};
+
+async function fetchData() {
+  try {
+    const [sumRes, stopRes] = await Promise.all([
+      fetch(API + '/summary'),
+      fetch(API + '/stops')
+    ]);
+    if (!sumRes.ok) throw new Error(await sumRes.text());
+    DB.summary = await sumRes.json();
+    DB.stops   = await stopRes.json();
+    document.getElementById('status-dot').className = 'ok';
+    document.getElementById('db-info').textContent =
+      `${DB.summary.length} días registrados — último: ${DB.summary[DB.summary.length-1]?.fecha || '—'}`;
+    document.getElementById('loading').style.display = 'none';
+    renderAll();
+  } catch(e) {
+    document.getElementById('status-dot').className = 'err';
+    document.getElementById('loading').style.display = 'none';
+    const el = document.getElementById('error-msg');
+    el.style.display = 'block';
+    el.innerHTML = `<b>No se pudo conectar al servidor local.</b><br>
+      Ejecutá en la terminal: <code>python3 server_wara.py</code><br>
+      Luego recargá esta página.<br><small>${e.message}</small>`;
+  }
+}
+
+function fmtPct(a, b) { return b ? Math.round(a/b*100) + '%' : '—'; }
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+function renderAll() {
+  renderResumen();
+  renderDiario();
+  renderInactividad();
+  renderSectores();
+  renderPatrones();
+}
+
+// ── Resumen ────────────────────────────────────────────────────────────────
+
+function renderResumen() {
+  const s = DB.summary;
+  const totalDist = s.reduce((a,r)=>a+(r.distancia_km||0),0);
+  const totalMov  = s.reduce((a,r)=>a+(r.movimiento_min||0),0);
+  const totalIdle = s.reduce((a,r)=>a+(r.ralenti_min||0),0);
+  const avgKmH    = s.filter(r=>r.km_por_hora_mov).map(r=>r.km_por_hora_mov);
+
+  document.getElementById('cards-resumen').innerHTML = `
+    <div class="card"><div class="card-label">Días registrados</div><div class="card-value">${s.length}</div></div>
+    <div class="card"><div class="card-label">Distancia total</div><div class="card-value">${totalDist.toFixed(1)}</div><div class="card-sub">km</div></div>
+    <div class="card"><div class="card-label">Movimiento total</div><div class="card-value">${(totalMov/60).toFixed(1)}</div><div class="card-sub">horas</div></div>
+    <div class="card"><div class="card-label">Inactividad total</div><div class="card-value">${(totalIdle/60).toFixed(1)}</div><div class="card-sub">horas</div></div>
+    <div class="card"><div class="card-label">% Inactividad prom.</div><div class="card-value">${fmtPct(totalIdle, totalMov+totalIdle)}</div></div>
+    <div class="card"><div class="card-label">Km/hra prom.</div><div class="card-value">${avgKmH.length ? avg(avgKmH).toFixed(1) : '—'}</div></div>
+  `;
+
+  const labels = s.map(r=>r.fecha.slice(5));
+  mkChart('chart-dist', 'bar', labels, [{
+    label:'Distancia (km)', data: s.map(r=>r.distancia_km||0),
+    backgroundColor:'rgba(44,110,63,.7)', borderRadius:4
+  }]);
+
+  mkChart('chart-mov-idle', 'bar', labels, [
+    { label:'Movimiento', data: s.map(r=>r.movimiento_min||0), backgroundColor:'rgba(44,110,63,.75)', borderRadius:4, stack:'a' },
+    { label:'Inactividad', data: s.map(r=>r.ralenti_min||0),  backgroundColor:'rgba(184,92,0,.6)',  borderRadius:4, stack:'a' }
+  ], { scales:{ x:{ stacked:true }, y:{ stacked:true } } });
+}
+
+// ── Diario ─────────────────────────────────────────────────────────────────
+
+function renderDiario() {
+  const n  = parseInt(document.getElementById('days-filter').value) || 30;
+  const rows = DB.summary.slice(-n);
+  const tbody = document.querySelector('#tbl-diario tbody');
+  tbody.innerHTML = [...rows].reverse().map(r => {
+    const total = (r.movimiento_min||0) + (r.ralenti_min||0);
+    const pct   = fmtPct(r.ralenti_min||0, total);
+    const pctNum = total ? Math.round((r.ralenti_min||0)/total*100) : 0;
+    const badge  = pctNum > 50 ? 'badge-warn' : pctNum > 30 ? 'badge-gray' : 'badge-green';
+    return `<tr>
+      <td>${r.fecha}</td><td>${r.dia_semana}</td>
+      <td>${r.hora_arranca||'—'}</td><td>${r.hora_termina||'—'}</td>
+      <td>${r.movimiento_min||'—'}</td><td>${r.ralenti_min||'—'}</td>
+      <td><span class="badge ${badge}">${pct}</span></td>
+      <td>${r.distancia_km||'—'}</td><td>${r.vel_max_kmh||'—'}</td>
+      <td>${r.km_por_hora_mov||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+document.getElementById('days-filter').addEventListener('change', renderDiario);
+
+// ── Inactividad ───────────────────────────────────────────────────────────
+
+function renderInactividad() {
+  const s        = DB.summary;
+  const stops    = DB.stops;
+  const allIdle  = s.reduce((a,r)=>a+(r.ralenti_min||0),0);
+  const allTotal = s.reduce((a,r)=>a+(r.movimiento_min||0)+(r.ralenti_min||0),0);
+
+  document.getElementById('cards-inact').innerHTML = `
+    <div class="card"><div class="card-label">% inactividad global</div><div class="card-value">${fmtPct(allIdle,allTotal)}</div></div>
+    <div class="card"><div class="card-label">Inactividad promedio/día</div><div class="card-value">${s.length?(allIdle/s.length).toFixed(0):'—'}</div><div class="card-sub">min</div></div>
+    <div class="card"><div class="card-label">Parada más larga</div><div class="card-value">${stops.length?Math.max(...stops.map(s=>s.duracion_min||0)).toFixed(0):'—'}</div><div class="card-sub">min</div></div>
+  `;
+
+  // Idle % by day of week
+  const dowMap = {};
+  s.forEach(r => {
+    if (!r.dia_semana) return;
+    if (!dowMap[r.dia_semana]) dowMap[r.dia_semana] = { idle:0, total:0, n:0 };
+    dowMap[r.dia_semana].idle  += r.ralenti_min||0;
+    dowMap[r.dia_semana].total += (r.movimiento_min||0)+(r.ralenti_min||0);
+    dowMap[r.dia_semana].n++;
+  });
+  const dow   = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  const pcts  = dow.map(d => dowMap[d] ? Math.round(dowMap[d].idle/dowMap[d].total*100) : null);
+  mkChart('chart-idle-dow','bar', dow, [{
+    label:'% Inactividad', data: pcts,
+    backgroundColor: pcts.map(p => p===null?'#ddd':p>50?'rgba(184,92,0,.7)':'rgba(44,110,63,.7)'),
+    borderRadius:4
+  }], { scales:{ y:{ max:100, ticks:{ callback:v=>v+'%' } } } });
+
+  // Top stops by duration
+  const sorted = [...stops].filter(s=>s.duracion_min>0).sort((a,b)=>b.duracion_min-a.duracion_min).slice(0,15);
+  const tbody  = document.querySelector('#tbl-stops tbody');
+  tbody.innerHTML = sorted.map(s=>`<tr>
+    <td>${s.fecha}</td><td>${s.hora}</td><td>${s.duracion_min}</td>
+    <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis">${s.lugar_raw||s.lugar_nombre||'—'}</td>
+    <td>${s.sector ? `<span class="badge badge-green">${s.sector}</span>` : '<span class="badge badge-gray">—</span>'}</td>
+  </tr>`).join('');
+
+  // Insights
+  const high = s.filter(r=>{
+    const t = (r.movimiento_min||0)+(r.ralenti_min||0);
+    return t > 0 && (r.ralenti_min||0)/t > 0.5;
+  });
+  let html = '';
+  if (high.length) html += `<div class="insight warn">⚠ ${high.length} día(s) con inactividad mayor al 50% del tiempo total: ${high.map(r=>r.fecha).join(', ')}</div>`;
+  const satData = s.filter(r=>r.dia_semana==='Sábado');
+  if (satData.length) html += `<div class="insight">Los sábados registrados tienen un promedio de ${avg(satData.map(r=>r.movimiento_min||0)).toFixed(0)} min de movimiento.</div>`;
+  document.getElementById('insights-inact').innerHTML = html;
+}
+
+// ── Sectores ──────────────────────────────────────────────────────────────
+
+function renderSectores() {
+  const stops = DB.stops.filter(s=>s.sector);
+  const map   = {};
+  stops.forEach(s=>{
+    if (!map[s.sector]) map[s.sector] = [];
+    map[s.sector].push(s.duracion_min||0);
+  });
+  const labels = Object.keys(map).sort((a,b)=>
+    map[b].reduce((x,y)=>x+y,0) - map[a].reduce((x,y)=>x+y,0));
+  const totals = labels.map(l=>map[l].reduce((a,b)=>a+b,0));
+
+  mkChart('chart-sectors','bar', labels, [{
+    label:'Minutos', data:totals,
+    backgroundColor:'rgba(44,110,63,.7)', borderRadius:4
+  }], { indexAxis:'y', scales:{ x:{ beginAtZero:true } } });
+
+  const tbody = document.querySelector('#tbl-sectors tbody');
+  tbody.innerHTML = labels.map(l=>{
+    const arr = map[l];
+    return `<tr>
+      <td><span class="badge badge-green">${l}</span></td>
+      <td>${arr.length}</td>
+      <td>${arr.reduce((a,b)=>a+b,0).toFixed(0)}</td>
+      <td>${avg(arr).toFixed(0)}</td>
+      <td>${Math.max(...arr).toFixed(0)}</td>
+    </tr>`;
+  }).join('');
+
+  if (!stops.length) {
+    document.querySelector('#tbl-sectors tbody').innerHTML =
+      '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px">'+
+      'Sin datos de sector aún — los sectores se asignan automáticamente cuando los puntos GPS coinciden con el mapa KML.</td></tr>';
+  }
+}
+
+// ── Patrones ──────────────────────────────────────────────────────────────
+
+function renderPatrones() {
+  const s   = DB.summary;
+  const dow = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+
+  // Movement minutes by day of week
+  const dowMov = {};
+  dow.forEach(d=>dowMov[d]={total:0,n:0});
+  s.forEach(r=>{ if(r.dia_semana && dowMov[r.dia_semana]) {
+    dowMov[r.dia_semana].total += r.movimiento_min||0;
+    dowMov[r.dia_semana].n++;
+  }});
+  mkChart('chart-dow','bar', dow, [{
+    label:'Promedio mov. (min)', data: dow.map(d=>dowMov[d].n?Math.round(dowMov[d].total/dowMov[d].n):null),
+    backgroundColor:'rgba(44,110,63,.7)', borderRadius:4
+  }]);
+
+  // Start/end hour distribution
+  const starts = s.filter(r=>r.hora_arranca).map(r=>parseInt(r.hora_arranca));
+  const ends   = s.filter(r=>r.hora_termina).map(r=>parseInt(r.hora_termina));
+  const hours  = Array.from({length:13},(_,i)=>i+6);
+  mkChart('chart-hours','bar', hours.map(h=>h+':00'), [
+    { label:'Arranque', data:hours.map(h=>starts.filter(s=>s===h).length), backgroundColor:'rgba(44,110,63,.7)', borderRadius:4 },
+    { label:'Término',  data:hours.map(h=>ends.filter(e=>e===h).length),   backgroundColor:'rgba(184,92,0,.6)',  borderRadius:4 }
+  ]);
+
+  // Weekend insight
+  const weekend = s.filter(r=>['Sábado','Domingo'].includes(r.dia_semana));
+  const weekday = s.filter(r=>!['Sábado','Domingo'].includes(r.dia_semana));
+  let html = '';
+  if (weekend.length) {
+    const avgW = avg(weekend.map(r=>r.movimiento_min||0));
+    const avgD = avg(weekday.map(r=>r.movimiento_min||0));
+    html += `<div class="insight${avgW > avgD*0.7 ? '' : ' warn'}">
+      Uso fin de semana: ${weekend.length} día(s) con promedio de ${avgW.toFixed(0)} min de movimiento
+      (vs ${avgD.toFixed(0)} min días hábiles).
+    </div>`;
+  }
+  document.getElementById('insights-patrones').innerHTML = html;
+}
+
+// ── Chart helper ──────────────────────────────────────────────────────────
+
+function mkChart(id, type, labels, datasets, extraOpts={}) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type,
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: datasets.length > 1 } },
+      scales: {
+        x: { grid:{ color:'#f0eeea' }, ticks:{ font:{size:11} } },
+        y: { grid:{ color:'#f0eeea' }, ticks:{ font:{size:11} }, beginAtZero:true },
+        ...(extraOpts.scales||{})
+      },
+      ...extraOpts
+    }
+  });
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+document.getElementById('tab-resumen').classList.add('active');
+fetchData();
+</script>
+</body>
+</html>
