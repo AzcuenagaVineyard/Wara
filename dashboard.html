@@ -40,12 +40,38 @@ nav button.active { color: var(--accent); border-bottom-color: var(--accent); fo
 
 main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
 
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin-bottom: 24px; }
+.date-filter-bar { background: var(--surface); border: 1px solid var(--border);
+                   border-radius: var(--radius); padding: 12px 16px;
+                   margin-bottom: 18px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.date-filter-label { font-size: 11px; font-weight: 600; text-transform: uppercase;
+                     letter-spacing: .6px; color: var(--muted); white-space: nowrap; }
+.date-filter-inputs { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.date-field { display: flex; align-items: center; gap: 6px; }
+.date-field label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.date-field input[type=date] { padding: 5px 10px; border: 1px solid var(--border);
+                                border-radius: 6px; font-size: 13px;
+                                background: var(--surface); color: var(--text); }
+.date-reset-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px;
+                  background: var(--surface); color: var(--muted); font-size: 12px;
+                  cursor: pointer; white-space: nowrap; }
+.date-reset-btn:hover { background: var(--bg); color: var(--text); }
+.date-range-count { font-size: 12px; color: var(--accent); font-weight: 500; }
+.card-group-title { font-size: 11px; font-weight: 600; text-transform: uppercase;
+                    letter-spacing: .6px; color: var(--muted); margin-bottom: 8px; padding-left: 2px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; }
 .card  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
          padding: 14px 16px; }
+.card.idle-card { border-color: #d4a96a; background: #fffaf4; }
 .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .card-value { font-size: 24px; font-weight: 600; margin-top: 2px; }
 .card-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.card.idle-card .card-label { color: #9a6b30; }
+.card.idle-card .card-value { color: var(--warn); }
+.editable-param { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.editable-param input { width: 64px; padding: 3px 6px; border: 1px solid #d4a96a;
+                        border-radius: 5px; font-size: 13px; font-weight: 600;
+                        color: var(--warn); background: #fff8f0; text-align: right; }
+.editable-param span { font-size: 11px; color: #9a6b30; }
 
 .section { background: var(--surface); border: 1px solid var(--border);
            border-radius: var(--radius); padding: 18px; margin-bottom: 20px; }
@@ -95,6 +121,7 @@ tr:hover td { background: #fafaf8; }
   <button class="active" onclick="showTab('resumen')">Resumen</button>
   <button onclick="showTab('diario')">Diario</button>
   <button onclick="showTab('inactividad')">Inactividad</button>
+  <button onclick="showTab('rastra')">Rastra</button>
   <button onclick="showTab('sectores')">Sectores</button>
   <button onclick="showTab('patrones')">Patrones</button>
 </nav>
@@ -105,7 +132,29 @@ tr:hover td { background: #fafaf8; }
 
   <!-- TAB: RESUMEN -->
   <div id="tab-resumen" class="tab-content">
-    <div class="cards" id="cards-resumen"></div>
+    <div class="card-group">
+      <div class="card-group-title">Resumen</div>
+      <div class="cards" id="cards-resumen"></div>
+    </div>
+    <div class="date-filter-bar">
+      <span class="date-filter-label">Período</span>
+      <div class="date-filter-inputs">
+        <div class="date-field">
+          <label>Desde</label>
+          <input type="date" id="filter-desde" onchange="renderResumen()">
+        </div>
+        <div class="date-field">
+          <label>Hasta</label>
+          <input type="date" id="filter-hasta" onchange="renderResumen()">
+        </div>
+        <button class="date-reset-btn" onclick="resetDateFilter()">Todos los días</button>
+        <span id="date-range-count" class="date-range-count"></span>
+      </div>
+    </div>
+    <div class="card-group">
+      <div class="card-group-title">Inactividad</div>
+      <div class="cards" id="cards-inactividad"></div>
+    </div>
     <div class="section">
       <h2>Distancia por día (km)</h2>
       <div class="chart-wrap"><canvas id="chart-dist"></canvas></div>
@@ -155,8 +204,88 @@ tr:hover td { background: #fafaf8; }
     </div>
   </div>
 
+
+  <!-- TAB: RASTRA -->
+  <div id="tab-rastra" class="tab-content">
+    <div class="cards" id="cards-rastra" style="margin-bottom:20px"></div>
+    <div class="section">
+      <h2>Días de rastra</h2>
+      <table id="tbl-rastra-days">
+        <thead><tr>
+          <th>Fecha</th><th>Día</th><th>Arranca</th><th>Termina</th>
+          <th>Mov (min)</th><th>Inact (min)</th><th>% Inact</th>
+          <th>Dist (km)</th><th>Km/hra mov</th><th>Detección</th><th>Override</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="section">
+      <h2>Tiempo en sector durante rastra (paradas)</h2>
+      <table id="tbl-rastra-sectors">
+        <thead><tr>
+          <th>Sector</th><th>Ha</th><th>Paradas</th><th>Tiempo parado (min)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- TAB: SECTORES -->
   <div id="tab-sectores" class="tab-content">
+    <div class="section">
+      <h2>Mapa de sectores</h2>
+      <svg width="100%" viewBox="0 0 680 520" role="img" style="display:block">
+        <title>Azcuénaga Vineyard — sector map</title>
+        <desc>Map of 13 vineyard sectors at Finca Azcuénaga, Maipú, Mendoza, colored by grape variety</desc>
+        <rect x="10" y="10" width="660" height="500" rx="12" fill="#f7f6f3" stroke="#e2e0d8" stroke-width="0.5"/>
+        <polygon points="326.9,75.7 353.1,77.6 364.1,50.1 334.5,50.0" fill="#C4A882" stroke="#7a5c32" stroke-width="1.2"/>
+        <text x="344.6" y="65" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#3d2a10" font-weight="500">Casa Ortiz</text>
+        <polygon points="270.6,271.3 295.1,257.0 351.9,79.5 327.6,77.0" fill="#9B72CF" stroke="#5c3690" stroke-width="1.2"/>
+        <text x="322" y="178" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#2a1045" font-weight="500">Malbec 2012</text>
+        <polygon points="264.7,293.7 281.4,295.1 294.8,259.2 270.2,273.0" fill="#3a7d44" stroke="#1f4d28" stroke-width="1.2"/>
+        <text x="278" y="282" text-anchor="middle" font-size="8" font-family="sans-serif" fill="#e8f5ea" font-weight="500">Cab Franc</text>
+        <text x="278" y="292" text-anchor="middle" font-size="8" font-family="sans-serif" fill="#e8f5ea" font-weight="500">1990</text>
+        <polygon points="105.4,282.9 72.1,372.1 100.8,366.1 112.2,378.6 157.2,370.9" fill="#4a4a52" stroke="#2a2a30" stroke-width="1.2"/>
+        <text x="108" y="346" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#e8e8ec" font-weight="500">Petit</text>
+        <text x="108" y="357" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#e8e8ec" font-weight="500">Verdot</text>
+        <polygon points="157.2,370.7 212.2,361.3 167.5,290.1 106.4,283.5" fill="#C49FE8" stroke="#7a4db0" stroke-width="1.2"/>
+        <text x="158" y="322" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#2a1045" font-weight="500">Malbec</text>
+        <text x="158" y="333" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#2a1045" font-weight="500">2018</text>
+        <polygon points="214.0,361.1 373.7,338.3 345.6,303.9 168.3,289.8" fill="#7344B8" stroke="#4a2880" stroke-width="1.2"/>
+        <text x="275" y="327" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#e8e0f8" font-weight="500">Malbec Injerto</text>
+        <polygon points="374.6,337.6 496.2,320.7 490.7,314.8 343.1,302.0" fill="#6aac74" stroke="#3a6e42" stroke-width="1.2"/>
+        <text x="424" y="323" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#0f2e14" font-weight="500">Cab Franc Injerto</text>
+        <polygon points="110.2,380.4 99.9,367.1 71.3,372.7 65.1,389.4" fill="#85B7EB" stroke="#185FA5" stroke-width="1.2"/>
+        <text x="88" y="381" text-anchor="middle" font-size="8" font-family="sans-serif" fill="#042C53" font-weight="500">Represa</text>
+        <polygon points="244.4,376.7 68.3,403.0 74.4,415.1 226.2,426.9" fill="#E8322A" stroke="#991a14" stroke-width="1.2"/>
+        <text x="152" y="410" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#fff5f5" font-weight="500">Merlot</text>
+        <polygon points="550.0,330.6 336.9,361.0 336.5,369.0 527.8,383.7" fill="#7a1428" stroke="#4d0c18" stroke-width="1.2"/>
+        <text x="437" y="362" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#f5d0d8" font-weight="500">Cab Sauv N (tri)</text>
+        <polygon points="232.9,426.9 311.9,434.1 287.2,370.5 252.1,374.9" fill="#c23050" stroke="#8a1a30" stroke-width="1.2"/>
+        <text x="272" y="405" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#fce8ec" font-weight="500">Cab Sauv</text>
+        <text x="272" y="416" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#fce8ec" font-weight="500">2027</text>
+        <polygon points="311.5,433.9 501.7,450.0 524.7,392.0 523.5,385.9 301.4,368.3 288.1,370.6" fill="#a01e38" stroke="#6e1025" stroke-width="1.2"/>
+        <text x="408" y="408" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#fce8ec" font-weight="500">Cab Sauv S (rect)</text>
+        <polygon points="50.0,414.6 72.1,416.1 67.0,403.6 53.9,403.5" fill="#dfc4a0" stroke="#9a7040" stroke-width="1.2"/>
+        <text x="61" y="413" text-anchor="middle" font-size="7.5" font-family="sans-serif" fill="#3d2a10" font-weight="500">Casa</text>
+        <text x="61" y="422" text-anchor="middle" font-size="7.5" font-family="sans-serif" fill="#3d2a10" font-weight="500">Hugas</text>
+        <text x="20" y="498" font-size="10" font-family="sans-serif" fill="#888780">N ↑ · Finca Azcuénaga, Maipú, Mendoza</text>
+        <line x1="620" y1="480" x2="650" y2="480" stroke="#888780" stroke-width="1.5"/>
+        <text x="635" y="475" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#888780">~100m</text>
+        <rect x="530" y="20" width="140" height="200" rx="6" fill="white" stroke="#e2e0d8" stroke-width="0.5"/>
+        <text x="600" y="38" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#6b6b65" font-weight="500">REFERENCIA</text>
+        <rect x="540" y="46" width="12" height="12" rx="2" fill="#9B72CF" stroke="#5c3690" stroke-width="0.8"/><text x="558" y="56"  font-size="8.5" font-family="sans-serif" fill="#1a1a18">Malbec 2012</text>
+        <rect x="540" y="62" width="12" height="12" rx="2" fill="#C49FE8" stroke="#7a4db0" stroke-width="0.8"/><text x="558" y="72"  font-size="8.5" font-family="sans-serif" fill="#1a1a18">Malbec 2018</text>
+        <rect x="540" y="78" width="12" height="12" rx="2" fill="#7344B8" stroke="#4a2880" stroke-width="0.8"/><text x="558" y="88"  font-size="8.5" font-family="sans-serif" fill="#1a1a18">Malbec Injerto</text>
+        <rect x="540" y="98" width="12" height="12" rx="2" fill="#3a7d44" stroke="#1f4d28" stroke-width="0.8"/><text x="558" y="108" font-size="8.5" font-family="sans-serif" fill="#1a1a18">Cab Franc 1990</text>
+        <rect x="540" y="114" width="12" height="12" rx="2" fill="#6aac74" stroke="#3a6e42" stroke-width="0.8"/><text x="558" y="124" font-size="8.5" font-family="sans-serif" fill="#1a1a18">Cab Franc Injerto</text>
+        <rect x="540" y="134" width="12" height="12" rx="2" fill="#7a1428" stroke="#4d0c18" stroke-width="0.8"/><text x="558" y="144" font-size="8.5" font-family="sans-serif" fill="#1a1a18">Cab Sauv N</text>
+        <rect x="540" y="150" width="12" height="12" rx="2" fill="#a01e38" stroke="#6e1025" stroke-width="0.8"/><text x="558" y="160" font-size="8.5" font-family="sans-serif" fill="#1a1a18">Cab Sauv S</text>
+        <rect x="540" y="166" width="12" height="12" rx="2" fill="#c23050" stroke="#8a1a30" stroke-width="0.8"/><text x="558" y="176" font-size="8.5" font-family="sans-serif" fill="#1a1a18">Cab Sauv 2027</text>
+        <rect x="540" y="186" width="12" height="12" rx="2" fill="#E8322A" stroke="#991a14" stroke-width="0.8"/><text x="558" y="196" font-size="8.5" font-family="sans-serif" fill="#1a1a18">Merlot</text>
+        <rect x="540" y="202" width="12" height="12" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.8"/><text x="558" y="212" font-size="8.5" font-family="sans-serif" fill="#1a1a18">Represa</text>
+      </svg>
+    </div>
     <div class="section">
       <h2>Tiempo total de detenciones por sector (min)</h2>
       <div class="chart-wrap" style="height:280px"><canvas id="chart-sectors"></canvas></div>
@@ -223,26 +352,94 @@ function renderAll() {
   renderResumen();
   renderDiario();
   renderInactividad();
+  renderRastra();
   renderSectores();
   renderPatrones();
 }
 
 // ── Resumen ────────────────────────────────────────────────────────────────
 
-function renderResumen() {
-  const s = DB.summary;
-  const totalDist = s.reduce((a,r)=>a+(r.distancia_km||0),0);
-  const totalMov  = s.reduce((a,r)=>a+(r.movimiento_min||0),0);
-  const totalIdle = s.reduce((a,r)=>a+(r.ralenti_min||0),0);
-  const avgKmH    = s.filter(r=>r.km_por_hora_mov).map(r=>r.km_por_hora_mov);
+// Editable fuel params — persisted in localStorage
+let fuelParams = {
+  gasoilPorLitro: parseFloat(localStorage.getItem('gasoilPorLitro') || '1.50'),
+  litrosPorHora:  parseFloat(localStorage.getItem('litrosPorHora')  || '1.8'),
+};
 
+function saveFuelParams() {
+  localStorage.setItem('gasoilPorLitro', fuelParams.gasoilPorLitro);
+  localStorage.setItem('litrosPorHora',  fuelParams.litrosPorHora);
+  renderResumen();
+}
+
+function resetDateFilter() {
+  document.getElementById('filter-desde').value = '';
+  document.getElementById('filter-hasta').value = '';
+  renderResumen();
+}
+
+function getFilteredSummary() {
+  const desde = document.getElementById('filter-desde')?.value || '';
+  const hasta = document.getElementById('filter-hasta')?.value || '';
+  return DB.summary.filter(r => {
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    return true;
+  });
+}
+
+function renderResumen() {
+  const s = getFilteredSummary();
+
+  // Update count label
+  const countEl = document.getElementById('date-range-count');
+  if (countEl) {
+    const desde = document.getElementById('filter-desde').value;
+    const hasta = document.getElementById('filter-hasta').value;
+    countEl.textContent = (desde || hasta)
+      ? `${s.length} día${s.length !== 1 ? 's' : ''} en el período`
+      : '';
+  }
+  const totalDist  = s.reduce((a,r)=>a+(r.distancia_km||0),0);
+  const totalMov   = s.reduce((a,r)=>a+(r.movimiento_min||0),0);
+  const totalIdle  = s.reduce((a,r)=>a+(r.ralenti_min||0),0);
+  const avgKmH     = s.filter(r=>r.km_por_hora_mov).map(r=>r.km_por_hora_mov);
+
+  // Active days = days where tractor actually moved
+  const activeDays = s.filter(r=>(r.movimiento_min||0) > 0);
+  const totalIdleActive = activeDays.reduce((a,r)=>a+(r.ralenti_min||0),0);
+  const ralentiPorDia   = activeDays.length ? totalIdleActive / activeDays.length : 0; // minutes
+  const ralentiHrsDia   = ralentiPorDia / 60;
+  const costoPorDia     = ralentiHrsDia * fuelParams.litrosPorHora * fuelParams.gasoilPorLitro;
+
+  // Row 1 — Resumen
   document.getElementById('cards-resumen').innerHTML = `
-    <div class="card"><div class="card-label">Días registrados</div><div class="card-value">${s.length}</div></div>
+    <div class="card"><div class="card-label">Días registrados</div><div class="card-value">${s.length}</div><div class="card-sub">${activeDays.length} activos</div></div>
     <div class="card"><div class="card-label">Distancia total</div><div class="card-value">${totalDist.toFixed(1)}</div><div class="card-sub">km</div></div>
-    <div class="card"><div class="card-label">Movimiento total</div><div class="card-value">${(totalMov/60).toFixed(1)}</div><div class="card-sub">horas</div></div>
-    <div class="card"><div class="card-label">Inactividad total</div><div class="card-value">${(totalIdle/60).toFixed(1)}</div><div class="card-sub">horas</div></div>
-    <div class="card"><div class="card-label">% Inactividad prom.</div><div class="card-value">${fmtPct(totalIdle, totalMov+totalIdle)}</div></div>
-    <div class="card"><div class="card-label">Km/hra prom.</div><div class="card-value">${avgKmH.length ? avg(avgKmH).toFixed(1) : '—'}</div></div>
+    <div class="card"><div class="card-label">Movimiento</div><div class="card-value">${(totalMov/60).toFixed(1)}</div><div class="card-sub">horas totales</div></div>
+    <div class="card"><div class="card-label">Km/h prom.</div><div class="card-value">${avgKmH.length ? avg(avgKmH).toFixed(1) : '—'}</div><div class="card-sub">en movimiento</div></div>
+  `;
+
+  // Row 2 — Inactividad
+  document.getElementById('cards-inactividad').innerHTML = `
+    <div class="card idle-card"><div class="card-label">% Inactividad prom.</div><div class="card-value">${fmtPct(totalIdle, totalMov+totalIdle)}</div><div class="card-sub">sobre tiempo total</div></div>
+    <div class="card idle-card"><div class="card-label">Ralentí/día</div><div class="card-value">${ralentiHrsDia.toFixed(2)}</div><div class="card-sub">hrs · días activos</div></div>
+    <div class="card idle-card">
+      <div class="card-label">L/Hra Inactividad</div>
+      <div class="editable-param">
+        <input type="number" id="input-lhr" value="${fuelParams.litrosPorHora}" min="0" step="0.1"
+               onchange="fuelParams.litrosPorHora=parseFloat(this.value)||0; saveFuelParams()">
+        <span>L/h</span>
+      </div>
+    </div>
+    <div class="card idle-card">
+      <div class="card-label">Gasoil/L</div>
+      <div class="editable-param">
+        <input type="number" id="input-gas" value="${fuelParams.gasoilPorLitro}" min="0" step="0.01"
+               onchange="fuelParams.gasoilPorLitro=parseFloat(this.value)||0; saveFuelParams()">
+        <span>USD/L</span>
+      </div>
+    </div>
+    <div class="card idle-card"><div class="card-label">Costo Ralentí/día</div><div class="card-value">$${costoPorDia.toFixed(2)}</div><div class="card-sub">USD estimado</div></div>
   `;
 
   const labels = s.map(r=>r.fecha.slice(5));
@@ -442,6 +639,169 @@ function showTab(name) {
 }
 
 document.getElementById('tab-resumen').classList.add('active');
+// ── Rastra ────────────────────────────────────────────────────────────────
+
+const PARCEL_AREAS = {
+  'Casa Ortiz':        2136,
+  'Malbec 2012':       12011,
+  'Cab Franc 1990':    1503,
+  'Petit Verdot':      11043,
+  'Malbec 2018':       13332,
+  'Malbec Injerto':    25911,
+  'Cab Franc Injerto': 8112,
+  'Represa':           1608,
+  'Merlot':            14467,
+  'Cab Sauv N (tri)':  17437,
+  'Cab Sauv 2027':     9412,
+  'Cab Sauv S (rect)': 40085,
+  'Casa Hugas':        589,
+};
+
+let rastraData = [];
+let rastraStops = [];
+
+async function loadRastraData() {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/rastra'),
+      fetch(API + '/rastra_stops')
+    ]);
+    rastraData  = await r1.json();
+    rastraStops = await r2.json();
+  } catch(e) {
+    console.error('Rastra load error', e);
+  }
+}
+
+async function toggleRastraTag(fecha, currentIsRastra, btn) {
+  const newTag = currentIsRastra ? 'not_rastra' : 'rastra';
+  btn.disabled = true;
+  await fetch(API + '/rastra_tag', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({fecha, tag: newTag})
+  });
+  await loadRastraData();
+  renderRastra();
+}
+
+async function clearRastraTag(fecha) {
+  await fetch(API + '/rastra_tag', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({fecha, tag: ''})
+  });
+  await loadRastraData();
+  renderRastra();
+}
+
+function renderRastra() {
+  const rastraDays = rastraData.filter(r => r.is_rastra);
+
+  // ── Summary cards ──
+  const totalMov  = rastraDays.reduce((a,r) => a+(r.movimiento_min||0), 0);
+  const totalIdle = rastraDays.reduce((a,r) => a+(r.ralenti_min||0), 0);
+  const totalDist = rastraDays.reduce((a,r) => a+(r.distancia_km||0), 0);
+  const kmhVals   = rastraDays.filter(r=>r.km_por_hora_mov).map(r=>r.km_por_hora_mov);
+  const avgKmh    = kmhVals.length ? avg(kmhVals) : 0;
+  const lhrRastra = fuelParams.litrosPorHoraRastra || 9;
+  const gasoilL   = fuelParams.gasoilPorLitro || 1.50;
+  const fuelCost  = (totalMov/60) * lhrRastra * gasoilL;
+  const totalHa   = Object.values(PARCEL_AREAS).reduce((a,b)=>a+b,0) / 10000;
+
+  document.getElementById('cards-rastra').innerHTML = `
+    <div class="card"><div class="card-label">Días de rastra</div><div class="card-value">${rastraDays.length}</div></div>
+    <div class="card"><div class="card-label">Movimiento total</div><div class="card-value">${(totalMov/60).toFixed(1)}</div><div class="card-sub">horas</div></div>
+    <div class="card"><div class="card-label">Inactividad total</div><div class="card-value">${(totalIdle/60).toFixed(1)}</div><div class="card-sub">horas · ${fmtPct(totalIdle, totalMov+totalIdle)}</div></div>
+    <div class="card"><div class="card-label">Distancia total</div><div class="card-value">${totalDist.toFixed(1)}</div><div class="card-sub">km</div></div>
+    <div class="card"><div class="card-label">Km/hra prom.</div><div class="card-value">${avgKmh.toFixed(1)}</div></div>
+    <div class="card idle-card">
+      <div class="card-label">L/Hra Rastra</div>
+      <div class="editable-param">
+        <input type="number" value="${lhrRastra}" min="0" step="0.1"
+          onchange="fuelParams.litrosPorHoraRastra=parseFloat(this.value)||0; localStorage.setItem('lhrRastra',this.value); renderRastra()">
+        <span>L/h</span>
+      </div>
+    </div>
+    <div class="card idle-card"><div class="card-label">Gasoil/L</div><div class="card-value">$${gasoilL.toFixed(2)}</div><div class="card-sub">desde Resumen</div></div>
+    <div class="card idle-card"><div class="card-label">Costo total rastra</div><div class="card-value">$${fuelCost.toFixed(2)}</div><div class="card-sub">USD</div></div>
+    <div class="card"><div class="card-label">Ha trabajadas</div><div class="card-value">${totalHa.toFixed(2)}</div><div class="card-sub">finca completa</div></div>
+  `;
+
+  // ── Per-day table ──
+  const tbody = document.querySelector('#tbl-rastra-days tbody');
+  tbody.innerHTML = rastraData.map(r => {
+    const total    = (r.movimiento_min||0) + (r.ralenti_min||0);
+    const pct      = fmtPct(r.ralenti_min||0, total);
+    const pctNum   = total ? Math.round((r.ralenti_min||0)/total*100) : 0;
+    const badge    = pctNum > 50 ? 'badge-warn' : pctNum > 30 ? 'badge-gray' : 'badge-green';
+    const autoTag  = r.auto_detected ? '<span class="badge badge-green">Auto</span>' : '<span class="badge badge-gray">No</span>';
+    const isRastra = r.is_rastra;
+    const hasOverride = r.manual_tag === 'rastra' || r.manual_tag === 'not_rastra';
+    const overrideBadge = r.manual_tag === 'rastra'
+      ? \`<span class="badge badge-green">Forzado ✓</span>\`
+      : r.manual_tag === 'not_rastra'
+      ? \`<span class="badge badge-warn">Excluido</span>\`
+      : '';
+    const toggleLabel = isRastra ? 'Excluir' : 'Incluir';
+    const toggleClass = isRastra ? 'badge-warn' : 'badge-green';
+    const clearBtn = hasOverride
+      ? \`<button class="badge badge-gray" style="border:none;cursor:pointer;margin-left:4px" onclick="clearRastraTag('\${r.fecha}')">Auto</button>\`
+      : '';
+    return \`<tr style="\${isRastra ? '' : 'opacity:0.5'}">
+      <td>\${r.fecha}</td><td>\${r.dia_semana}</td>
+      <td>\${r.hora_arranca||'—'}</td><td>\${r.hora_termina||'—'}</td>
+      <td>\${r.movimiento_min||'—'}</td><td>\${r.ralenti_min||'—'}</td>
+      <td><span class="badge \${badge}">\${pct}</span></td>
+      <td>\${r.distancia_km||'—'}</td><td>\${r.km_por_hora_mov||'—'}</td>
+      <td>\${autoTag} \${overrideBadge}</td>
+      <td>
+        <button class="badge \${toggleClass}" style="border:none;cursor:pointer"
+          onclick="toggleRastraTag('\${r.fecha}', \${isRastra}, this)">\${toggleLabel}</button>
+        \${clearBtn}
+      </td>
+    </tr>\`;
+  }).join('');
+
+  // ── Per-sector table ──
+  const sectorMap = {};
+  rastraStops.forEach(s => { if(s.sector) sectorMap[s.sector] = s; });
+  const tbody2 = document.querySelector('#tbl-rastra-sectors tbody');
+  const sectorNames = Object.keys(PARCEL_AREAS);
+  tbody2.innerHTML = sectorNames.map(name => {
+    const s    = sectorMap[name];
+    const ha   = (PARCEL_AREAS[name] / 10000).toFixed(3);
+    const min  = s ? s.total_min.toFixed(0) : '—';
+    const n    = s ? s.n_stops : '—';
+    return \`<tr>
+      <td>\${name}</td>
+      <td>\${ha}</td>
+      <td>\${n}</td>
+      <td>\${min}</td>
+    </tr>\`;
+  }).join('');
+}
+
+// Load rastra data once on init, then render
+loadRastraData().then(() => {
+  if (document.getElementById('tab-rastra').classList.contains('active')) renderRastra();
+});
+
+// Also reload when tab is clicked
+const origShowTab = showTab;
+function showTab(name) {
+  origShowTab(name);
+  if (name === 'rastra' && rastraData.length === 0) {
+    loadRastraData().then(renderRastra);
+  } else if (name === 'rastra') {
+    renderRastra();
+  }
+}
+
+// Init L/Hra Rastra from localStorage
+fuelParams.litrosPorHoraRastra = parseFloat(localStorage.getItem('lhrRastra') || '9');
+
+
 fetchData();
 </script>
 </body>
