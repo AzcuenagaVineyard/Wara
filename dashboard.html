@@ -636,28 +636,26 @@ function showTab(name) {
   document.querySelectorAll('nav button').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   event.currentTarget.classList.add('active');
+  if (name === 'rastra') { loadRastraData().then(renderRastra); }
 }
 
 document.getElementById('tab-resumen').classList.add('active');
-// ── Rastra ────────────────────────────────────────────────────────────────
+fetchData();
+</script>
+</body>
+</html>
+<script>
+// ── Rastra tab ────────────────────────────────────────────────────────────
 
 const PARCEL_AREAS = {
-  'Casa Ortiz':        2136,
-  'Malbec 2012':       12011,
-  'Cab Franc 1990':    1503,
-  'Petit Verdot':      11043,
-  'Malbec 2018':       13332,
-  'Malbec Injerto':    25911,
-  'Cab Franc Injerto': 8112,
-  'Represa':           1608,
-  'Merlot':            14467,
-  'Cab Sauv N (tri)':  17437,
-  'Cab Sauv 2027':     9412,
-  'Cab Sauv S (rect)': 40085,
-  'Casa Hugas':        589,
+  'Casa Ortiz': 2136, 'Malbec 2012': 12011, 'Cab Franc 1990': 1503,
+  'Petit Verdot': 11043, 'Malbec 2018': 13332, 'Malbec Injerto': 25911,
+  'Cab Franc Injerto': 8112, 'Represa': 1608, 'Merlot': 14467,
+  'Cab Sauv N (tri)': 17437, 'Cab Sauv 2027': 9412,
+  'Cab Sauv S (rect)': 40085, 'Casa Hugas': 589
 };
 
-let rastraData = [];
+let rastraData  = [];
 let rastraStops = [];
 
 async function loadRastraData() {
@@ -668,18 +666,16 @@ async function loadRastraData() {
     ]);
     rastraData  = await r1.json();
     rastraStops = await r2.json();
-  } catch(e) {
-    console.error('Rastra load error', e);
-  }
+  } catch(e) { console.error('Rastra load error', e); }
 }
 
 async function toggleRastraTag(fecha, currentIsRastra, btn) {
-  const newTag = currentIsRastra ? 'not_rastra' : 'rastra';
   btn.disabled = true;
+  const newTag = currentIsRastra ? 'not_rastra' : 'rastra';
   await fetch(API + '/rastra_tag', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({fecha, tag: newTag})
+    body: JSON.stringify({fecha: fecha, tag: newTag})
   });
   await loadRastraData();
   renderRastra();
@@ -689,120 +685,77 @@ async function clearRastraTag(fecha) {
   await fetch(API + '/rastra_tag', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({fecha, tag: ''})
+    body: JSON.stringify({fecha: fecha, tag: ''})
   });
   await loadRastraData();
   renderRastra();
 }
 
 function renderRastra() {
-  const rastraDays = rastraData.filter(r => r.is_rastra);
+  const rastraDays = rastraData.filter(function(r) { return r.is_rastra; });
+  const totalMov   = rastraDays.reduce(function(a,r) { return a+(r.movimiento_min||0); }, 0);
+  const totalIdle  = rastraDays.reduce(function(a,r) { return a+(r.ralenti_min||0); }, 0);
+  const totalDist  = rastraDays.reduce(function(a,r) { return a+(r.distancia_km||0); }, 0);
+  const kmhVals    = rastraDays.filter(function(r) { return r.km_por_hora_mov; }).map(function(r) { return r.km_por_hora_mov; });
+  const avgKmh     = kmhVals.length ? avg(kmhVals) : 0;
+  const lhrRastra  = fuelParams.litrosPorHoraRastra || 9;
+  const gasoilL    = fuelParams.gasoilPorLitro || 1.50;
+  const fuelCost   = (totalMov/60) * lhrRastra * gasoilL;
+  const totalHa    = Object.values(PARCEL_AREAS).reduce(function(a,b){return a+b;},0) / 10000;
 
-  // ── Summary cards ──
-  const totalMov  = rastraDays.reduce((a,r) => a+(r.movimiento_min||0), 0);
-  const totalIdle = rastraDays.reduce((a,r) => a+(r.ralenti_min||0), 0);
-  const totalDist = rastraDays.reduce((a,r) => a+(r.distancia_km||0), 0);
-  const kmhVals   = rastraDays.filter(r=>r.km_por_hora_mov).map(r=>r.km_por_hora_mov);
-  const avgKmh    = kmhVals.length ? avg(kmhVals) : 0;
-  const lhrRastra = fuelParams.litrosPorHoraRastra || 9;
-  const gasoilL   = fuelParams.gasoilPorLitro || 1.50;
-  const fuelCost  = (totalMov/60) * lhrRastra * gasoilL;
-  const totalHa   = Object.values(PARCEL_AREAS).reduce((a,b)=>a+b,0) / 10000;
+  document.getElementById('cards-rastra').innerHTML =
+    '<div class="card"><div class="card-label">Días de rastra</div><div class="card-value">' + rastraDays.length + '</div></div>' +
+    '<div class="card"><div class="card-label">Movimiento total</div><div class="card-value">' + (totalMov/60).toFixed(1) + '</div><div class="card-sub">horas</div></div>' +
+    '<div class="card"><div class="card-label">Inactividad total</div><div class="card-value">' + (totalIdle/60).toFixed(1) + '</div><div class="card-sub">horas · ' + fmtPct(totalIdle, totalMov+totalIdle) + '</div></div>' +
+    '<div class="card"><div class="card-label">Distancia total</div><div class="card-value">' + totalDist.toFixed(1) + '</div><div class="card-sub">km</div></div>' +
+    '<div class="card"><div class="card-label">Km/hra prom.</div><div class="card-value">' + avgKmh.toFixed(1) + '</div></div>' +
+    '<div class="card idle-card"><div class="card-label">L/Hra Rastra</div><div class="editable-param"><input type="number" value="' + lhrRastra + '" min="0" step="0.1" onchange="fuelParams.litrosPorHoraRastra=parseFloat(this.value)||0; localStorage.setItem(\'lhrRastra\',this.value); renderRastra()"><span>L/h</span></div></div>' +
+    '<div class="card idle-card"><div class="card-label">Gasoil/L</div><div class="card-value">$' + gasoilL.toFixed(2) + '</div><div class="card-sub">desde Resumen</div></div>' +
+    '<div class="card idle-card"><div class="card-label">Costo total rastra</div><div class="card-value">$' + fuelCost.toFixed(2) + '</div><div class="card-sub">USD</div></div>' +
+    '<div class="card"><div class="card-label">Ha trabajadas</div><div class="card-value">' + totalHa.toFixed(2) + '</div><div class="card-sub">finca completa</div></div>';
 
-  document.getElementById('cards-rastra').innerHTML = `
-    <div class="card"><div class="card-label">Días de rastra</div><div class="card-value">${rastraDays.length}</div></div>
-    <div class="card"><div class="card-label">Movimiento total</div><div class="card-value">${(totalMov/60).toFixed(1)}</div><div class="card-sub">horas</div></div>
-    <div class="card"><div class="card-label">Inactividad total</div><div class="card-value">${(totalIdle/60).toFixed(1)}</div><div class="card-sub">horas · ${fmtPct(totalIdle, totalMov+totalIdle)}</div></div>
-    <div class="card"><div class="card-label">Distancia total</div><div class="card-value">${totalDist.toFixed(1)}</div><div class="card-sub">km</div></div>
-    <div class="card"><div class="card-label">Km/hra prom.</div><div class="card-value">${avgKmh.toFixed(1)}</div></div>
-    <div class="card idle-card">
-      <div class="card-label">L/Hra Rastra</div>
-      <div class="editable-param">
-        <input type="number" value="${lhrRastra}" min="0" step="0.1"
-          onchange="fuelParams.litrosPorHoraRastra=parseFloat(this.value)||0; localStorage.setItem('lhrRastra',this.value); renderRastra()">
-        <span>L/h</span>
-      </div>
-    </div>
-    <div class="card idle-card"><div class="card-label">Gasoil/L</div><div class="card-value">$${gasoilL.toFixed(2)}</div><div class="card-sub">desde Resumen</div></div>
-    <div class="card idle-card"><div class="card-label">Costo total rastra</div><div class="card-value">$${fuelCost.toFixed(2)}</div><div class="card-sub">USD</div></div>
-    <div class="card"><div class="card-label">Ha trabajadas</div><div class="card-value">${totalHa.toFixed(2)}</div><div class="card-sub">finca completa</div></div>
-  `;
+  var tbody = document.querySelector('#tbl-rastra-days tbody');
+  var rows = '';
+  rastraData.slice().reverse().forEach(function(r) {
+    var total    = (r.movimiento_min||0) + (r.ralenti_min||0);
+    var pct      = fmtPct(r.ralenti_min||0, total);
+    var pctNum   = total ? Math.round((r.ralenti_min||0)/total*100) : 0;
+    var badge    = pctNum > 50 ? 'badge-warn' : pctNum > 30 ? 'badge-gray' : 'badge-green';
+    var autoTag  = r.auto_detected ? '<span class="badge badge-green">Auto</span>' : '<span class="badge badge-gray">No</span>';
+    var override = r.manual_tag === 'rastra' ? '<span class="badge badge-green">Forzado</span>' :
+                   r.manual_tag === 'not_rastra' ? '<span class="badge badge-warn">Excluido</span>' : '';
+    var toggleLbl = r.is_rastra ? 'Excluir' : 'Incluir';
+    var toggleCls = r.is_rastra ? 'badge-warn' : 'badge-green';
+    var clearBtn  = r.manual_tag ? '<button class="badge badge-gray" style="border:none;cursor:pointer;margin-left:4px" onclick="clearRastraTag(\'' + r.fecha + '\')">Auto</button>' : '';
+    rows += '<tr style="' + (r.is_rastra ? '' : 'opacity:0.5') + '">' +
+      '<td>' + r.fecha + '</td><td>' + r.dia_semana + '</td>' +
+      '<td>' + (r.hora_arranca||'—') + '</td><td>' + (r.hora_termina||'—') + '</td>' +
+      '<td>' + (r.movimiento_min||'—') + '</td><td>' + (r.ralenti_min||'—') + '</td>' +
+      '<td><span class="badge ' + badge + '">' + pct + '</span></td>' +
+      '<td>' + (r.distancia_km||'—') + '</td><td>' + (r.km_por_hora_mov||'—') + '</td>' +
+      '<td>' + autoTag + ' ' + override + '</td>' +
+      '<td><button class="badge ' + toggleCls + '" style="border:none;cursor:pointer" onclick="toggleRastraTag(\'' + r.fecha + '\',' + r.is_rastra + ',this)">' + toggleLbl + '</button>' + clearBtn + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = rows;
 
-  // ── Per-day table ──
-  const tbody = document.querySelector('#tbl-rastra-days tbody');
-  tbody.innerHTML = rastraData.map(r => {
-    const total    = (r.movimiento_min||0) + (r.ralenti_min||0);
-    const pct      = fmtPct(r.ralenti_min||0, total);
-    const pctNum   = total ? Math.round((r.ralenti_min||0)/total*100) : 0;
-    const badge    = pctNum > 50 ? 'badge-warn' : pctNum > 30 ? 'badge-gray' : 'badge-green';
-    const autoTag  = r.auto_detected ? '<span class="badge badge-green">Auto</span>' : '<span class="badge badge-gray">No</span>';
-    const isRastra = r.is_rastra;
-    const hasOverride = r.manual_tag === 'rastra' || r.manual_tag === 'not_rastra';
-    const overrideBadge = r.manual_tag === 'rastra'
-      ? \`<span class="badge badge-green">Forzado ✓</span>\`
-      : r.manual_tag === 'not_rastra'
-      ? \`<span class="badge badge-warn">Excluido</span>\`
-      : '';
-    const toggleLabel = isRastra ? 'Excluir' : 'Incluir';
-    const toggleClass = isRastra ? 'badge-warn' : 'badge-green';
-    const clearBtn = hasOverride
-      ? \`<button class="badge badge-gray" style="border:none;cursor:pointer;margin-left:4px" onclick="clearRastraTag('\${r.fecha}')">Auto</button>\`
-      : '';
-    return \`<tr style="\${isRastra ? '' : 'opacity:0.5'}">
-      <td>\${r.fecha}</td><td>\${r.dia_semana}</td>
-      <td>\${r.hora_arranca||'—'}</td><td>\${r.hora_termina||'—'}</td>
-      <td>\${r.movimiento_min||'—'}</td><td>\${r.ralenti_min||'—'}</td>
-      <td><span class="badge \${badge}">\${pct}</span></td>
-      <td>\${r.distancia_km||'—'}</td><td>\${r.km_por_hora_mov||'—'}</td>
-      <td>\${autoTag} \${overrideBadge}</td>
-      <td>
-        <button class="badge \${toggleClass}" style="border:none;cursor:pointer"
-          onclick="toggleRastraTag('\${r.fecha}', \${isRastra}, this)">\${toggleLabel}</button>
-        \${clearBtn}
-      </td>
-    </tr>\`;
-  }).join('');
-
-  // ── Per-sector table ──
-  const sectorMap = {};
-  rastraStops.forEach(s => { if(s.sector) sectorMap[s.sector] = s; });
-  const tbody2 = document.querySelector('#tbl-rastra-sectors tbody');
-  const sectorNames = Object.keys(PARCEL_AREAS);
-  tbody2.innerHTML = sectorNames.map(name => {
-    const s    = sectorMap[name];
-    const ha   = (PARCEL_AREAS[name] / 10000).toFixed(3);
-    const min  = s ? s.total_min.toFixed(0) : '—';
-    const n    = s ? s.n_stops : '—';
-    return \`<tr>
-      <td>\${name}</td>
-      <td>\${ha}</td>
-      <td>\${n}</td>
-      <td>\${min}</td>
-    </tr>\`;
-  }).join('');
+  var sectorMap = {};
+  rastraStops.forEach(function(s) { if(s.sector) sectorMap[s.sector] = s; });
+  var tbody2 = document.querySelector('#tbl-rastra-sectors tbody');
+  var rows2 = '';
+  Object.keys(PARCEL_AREAS).forEach(function(name) {
+    var s   = sectorMap[name];
+    var ha  = (PARCEL_AREAS[name]/10000).toFixed(3);
+    var min = s ? s.total_min.toFixed(0) : '—';
+    var n   = s ? s.n_stops : '—';
+    rows2 += '<tr><td>' + name + '</td><td>' + ha + '</td><td>' + n + '</td><td>' + min + '</td></tr>';
+  });
+  tbody2.innerHTML = rows2;
 }
 
-// Load rastra data once on init, then render
-loadRastraData().then(() => {
-  if (document.getElementById('tab-rastra').classList.contains('active')) renderRastra();
-});
-
-// Also reload when tab is clicked
-const origShowTab = showTab;
-function showTab(name) {
-  origShowTab(name);
-  if (name === 'rastra' && rastraData.length === 0) {
-    loadRastraData().then(renderRastra);
-  } else if (name === 'rastra') {
-    renderRastra();
-  }
-}
-
-// Init L/Hra Rastra from localStorage
 fuelParams.litrosPorHoraRastra = parseFloat(localStorage.getItem('lhrRastra') || '9');
 
-
-fetchData();
+loadRastraData().then(function() {
+  if (document.getElementById('tab-rastra').classList.contains('active')) renderRastra();
+});
 </script>
-</body>
-</html>
