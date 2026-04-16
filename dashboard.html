@@ -853,7 +853,13 @@ function renderAlmuerzo() {
       '<td>' + r.fecha + '</td>' +
       '<td>' + r.dia_semana + '</td>' +
       '<td>' + r.hora + '</td>' +
-      '<td style="font-weight:500">' + r.duracion_min + ' min</td>' +
+      (function() {
+        var mins = r.duracion_min || 0;
+        var bg = mins >= 120 ? '#ffcccc' : mins >= 60 ? '#fffacc' : '';
+        var color = mins >= 120 ? '#8b0000' : mins >= 60 ? '#7a6000' : '';
+        var style = bg ? 'font-weight:500;background:' + bg + ';color:' + color + ';border-radius:4px;padding:2px 6px' : 'font-weight:500';
+        return '<td><span style="' + style + '">' + mins + ' min</span></td>';
+      })() +
       '<td><select id="alm-sector-' + r.fecha + '" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text)">' + opts + '</select></td>' +
       '<td><button id="alm-btn-' + r.fecha + '" onclick="saveAlmuerzo(\'' + r.fecha + '\')" style="font-size:12px;padding:4px 10px;cursor:pointer;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text)">Guardar</button></td>' +
       '</tr>';
