@@ -116,6 +116,7 @@ tr:hover td { background: #fafaf8; }
   <h1>New Holland TT3880F</h1>
   <span id="db-info">Conectando…</span>
   <button id="export-btn" onclick="exportSnapshot()" style="margin-left:auto;font-size:12px;padding:5px 14px;cursor:pointer;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">Exportar snapshot</button>
+  <button id="publish-btn" onclick="exportAndPublish()" style="font-size:12px;padding:5px 14px;cursor:pointer;border:1px solid #2c6e3f;border-radius:6px;background:#e8f5ed;color:#2c6e3f;font-weight:500">Exportar y publicar</button>
 </header>
 
 <nav>
@@ -1014,6 +1015,93 @@ async function exportSnapshot() {
     console.error('Export error', e);
     btn.textContent = 'Error';
     setTimeout(function() { btn.disabled = false; btn.textContent = 'Exportar snapshot'; }, 3000);
+  }
+}
+</script>
+<script>
+async function exportAndPublish() {
+  var btn = document.getElementById('publish-btn');
+  btn.disabled = true;
+
+  // Step 1: generate snapshot
+  btn.textContent = '1/2 Generando snapshot...';
+  try {
+    var results = await Promise.all([
+      fetch(API + '/summary').then(function(r){return r.json();}),
+      fetch(API + '/stops').then(function(r){return r.json();}),
+      fetch(API + '/rastra').then(function(r){return r.json();}),
+      fetch(API + '/almuerzo').then(function(r){return r.json();}),
+      fetch(API + '/rastra_sectors_assigned').then(function(r){return r.json();})
+    ]);
+
+    var snapDate = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+    var dataScript = '<script>window.SNAPSHOT_DATA={summary:' +
+      JSON.stringify(results[0]) + ',stops:' +
+      JSON.stringify(results[1]) + ',rastra:' +
+      JSON.stringify(results[2]) + ',almuerzo:' +
+      JSON.stringify(results[3]) + ',rastra_sectors:' +
+      JSON.stringify(results[4]) + '};' +
+      'window.fetch=(function(orig){return function(url){' +
+      'if(url&&url.includes("localhost:8765")){' +
+      'var p=url.replace(/.*localhost:8765/,"");var d=window.SNAPSHOT_DATA;' +
+      'if(p==="/summary")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.summary);}});' +
+      'if(p==="/stops")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.stops);}});' +
+      'if(p==="/rastra")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.rastra);}});' +
+      'if(p==="/almuerzo")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.almuerzo);}});' +
+      'if(p==="/rastra_sectors_assigned")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.rastra_sectors);}});' +
+      'return Promise.resolve({ok:true,json:function(){return Promise.resolve([]);}});}' +
+      'return orig.apply(this,arguments);};})(window.fetch);<\/script>';
+
+    var resp = await fetch(window.location.href);
+    var html = await resp.text();
+    html = html.replace('<head>', '<head>' + dataScript);
+    html = html.replace('<h1>New Holland TT3880F</h1>',
+      '<h1>New Holland TT3880F</h1><span style="font-size:11px;background:#e8f5ed;color:#2c6e3f;padding:3px 8px;border-radius:4px;margin-left:8px">Snapshot ' + snapDate + '</span>');
+    html = html.replace(/id="export-btn"[^>]*>[^<]*<\/button>/, 'id="export-btn" style="display:none">');
+    html = html.replace(/id="publish-btn"[^>]*>[^<]*<\/button>/, 'id="publish-btn" style="display:none">');
+
+    var filename = 'WARA_snapshot_' + snapDate.replace(/\//g,'-') + '.html';
+
+    // Save to WARA folder via server
+    btn.textContent = '2/2 Publicando en GitHub...';
+
+    // First save the snapshot file via server, then trigger git push
+    var saveRes = await fetch(API + '/save_snapshot', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filename: filename, content: html})
+    });
+    if (!saveRes.ok) throw new Error('No se pudo guardar el snapshot');
+
+    var pubRes = await fetch(API + '/publish', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({})
+    });
+    var pubData = await pubRes.json();
+    if (!pubRes.ok) throw new Error(pubData.error || 'Error al publicar');
+
+    btn.style.background = '#2c6e3f';
+    btn.style.color = '#fff';
+    btn.textContent = 'Publicado';
+    setTimeout(function() {
+      btn.disabled = false;
+      btn.style.background = '#e8f5ed';
+      btn.style.color = '#2c6e3f';
+      btn.textContent = 'Exportar y publicar';
+    }, 3000);
+
+  } catch(e) {
+    console.error('Publish error', e);
+    btn.textContent = 'Error: ' + e.message;
+    btn.style.background = '#fdecea';
+    btn.style.color = '#c0392b';
+    setTimeout(function() {
+      btn.disabled = false;
+      btn.style.background = '#e8f5ed';
+      btn.style.color = '#2c6e3f';
+      btn.textContent = 'Exportar y publicar';
+    }, 4000);
   }
 }
 </script>
