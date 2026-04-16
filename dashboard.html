@@ -190,6 +190,15 @@ tr:hover td { background: #fafaf8; }
     <div class="cards" id="cards-inact"></div>
     <div id="insights-inact"></div>
     <div class="section">
+      <h2>Almuerzo del tractorista</h2>
+      <table id="tbl-almuerzo">
+        <thead><tr>
+          <th>Fecha</th><th>Día</th><th>Hora</th><th>Duración (min)</th><th>Sector</th><th>Guardar</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="section">
       <h2>Inactividad % por día de la semana</h2>
       <div class="chart-wrap"><canvas id="chart-idle-dow"></canvas></div>
     </div>
@@ -208,6 +217,15 @@ tr:hover td { background: #fafaf8; }
   <!-- TAB: RASTRA -->
   <div id="tab-rastra" class="tab-content">
     <div class="cards" id="cards-rastra" style="margin-bottom:20px"></div>
+    <div class="section">
+      <h2>Sectores trabajados por día</h2>
+      <table id="tbl-rastra-assign">
+        <thead><tr>
+          <th>Fecha</th><th>Día</th><th>Dist (km)</th><th>Sectores trabajados</th><th>Guardar</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
     <div class="section">
       <h2>Días de rastra</h2>
       <table id="tbl-rastra-days">
@@ -636,7 +654,15 @@ function showTab(name) {
   document.querySelectorAll('nav button').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   event.currentTarget.classList.add('active');
-  if (name === 'rastra') { loadRastraData().then(renderRastra); }
+  if (name === 'rastra') {
+    loadRastraData().then(function() {
+      loadRastraSectorData().then(function() {
+        renderRastra();
+        renderRastraSectorAssign();
+      });
+    });
+  }
+  if (name === 'inactividad') { loadAlmuerzoData().then(renderAlmuerzo); }
 }
 
 document.getElementById('tab-resumen').classList.add('active');
@@ -757,5 +783,150 @@ fuelParams.litrosPorHoraRastra = parseFloat(localStorage.getItem('lhrRastra') ||
 
 loadRastraData().then(function() {
   if (document.getElementById('tab-rastra').classList.contains('active')) renderRastra();
+});
+</script>
+<script>
+// ── Almuerzo ──────────────────────────────────────────────────────────────
+
+const SECTOR_NAMES = [
+  '','Casa Ortiz','Malbec 2012','Cab Franc 1990','Petit Verdot',
+  'Malbec 2018','Malbec Injerto','Cab Franc Injerto','Represa',
+  'Merlot','Cab Sauv N (tri)','Cab Sauv 2027','Cab Sauv S (rect)','Casa Hugas','Desconocido'
+];
+
+let almuerzoData = [];
+let rastraSectorData = {};
+
+async function loadAlmuerzoData() {
+  try {
+    const r = await fetch(API + '/almuerzo');
+    almuerzoData = await r.json();
+  } catch(e) { console.error('Almuerzo load error', e); }
+}
+
+async function loadRastraSectorData() {
+  try {
+    const r = await fetch(API + '/rastra_sectors_assigned');
+    const rows = await r.json();
+    rastraSectorData = {};
+    rows.forEach(function(row) {
+      if (!rastraSectorData[row.fecha]) rastraSectorData[row.fecha] = [];
+      rastraSectorData[row.fecha].push(row.sector);
+    });
+  } catch(e) { console.error('Rastra sector load error', e); }
+}
+
+async function saveAlmuerzo(fecha) {
+  var sector = document.getElementById('alm-sector-' + fecha).value;
+  var btn    = document.getElementById('alm-btn-' + fecha);
+  btn.disabled = true;
+  btn.textContent = '...';
+  await fetch(API + '/almuerzo_tag', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({fecha: fecha, sector: sector, nota: ''})
+  });
+  await loadAlmuerzoData();
+  renderAlmuerzo();
+  btn.textContent = 'Guardado';
+  setTimeout(function() { btn.disabled = false; btn.textContent = 'Guardar'; }, 1500);
+}
+
+function renderAlmuerzo() {
+  var tbody = document.querySelector('#tbl-almuerzo tbody');
+  if (!tbody) return;
+  if (!almuerzoData.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:16px">No se detectaron almuerzos en el período actual</td></tr>';
+    return;
+  }
+  var sectorOptions = SECTOR_NAMES.map(function(s) {
+    return '<option value="' + s + '">' + (s || '— sin asignar —') + '</option>';
+  }).join('');
+
+  tbody.innerHTML = almuerzoData.map(function(r) {
+    var savedSector = r.sector_tag || '';
+    var savedNota   = r.nota || '';
+    var opts = SECTOR_NAMES.map(function(s) {
+      return '<option value="' + s + '"' + (s === savedSector ? ' selected' : '') + '>' + (s || '— sin asignar —') + '</option>';
+    }).join('');
+    return '<tr>' +
+      '<td>' + r.fecha + '</td>' +
+      '<td>' + r.dia_semana + '</td>' +
+      '<td>' + r.hora + '</td>' +
+      '<td style="font-weight:500">' + r.duracion_min + ' min</td>' +
+      '<td><select id="alm-sector-' + r.fecha + '" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text)">' + opts + '</select></td>' +
+      '<td><button id="alm-btn-' + r.fecha + '" onclick="saveAlmuerzo(\'' + r.fecha + '\')" style="font-size:12px;padding:4px 10px;cursor:pointer;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text)">Guardar</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function renderRastraSectorAssign() {
+  var tbody = document.querySelector('#tbl-rastra-assign tbody');
+  if (!tbody) return;
+  var rastraDays = rastraData.filter(function(r) { return r.is_rastra; });
+  if (!rastraDays.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:16px">Sin dias de rastra detectados</td></tr>';
+    return;
+  }
+  var plantableSectors = SECTOR_NAMES.filter(function(s) {
+    return s && s !== 'Desconocido' && s !== 'Casa Ortiz' && s !== 'Casa Hugas' && s !== 'Represa';
+  });
+  tbody.innerHTML = rastraDays.slice().reverse().map(function(r) {
+    var assigned = rastraSectorData[r.fecha] || [];
+    var available = plantableSectors.filter(function(s) { return assigned.indexOf(s) < 0; });
+    var leftItems = available.map(function(s) {
+      return '<div onclick="rsMoveIn(\''+r.fecha+'\',\''+s.replace(/\x27/g,'\\\'')+'\''+')" style="padding:3px 8px;margin:2px 0;cursor:pointer;border-radius:4px;border:1px solid #ccc;font-size:12px">'+s+'</div>';
+    }).join('');
+    var rightItems = assigned.map(function(s) {
+      return '<div onclick="rsMoveOut(\''+r.fecha+'\',\''+s.replace(/\x27/g,'\\\'')+'\''+')" style="padding:3px 8px;margin:2px 0;cursor:pointer;border-radius:4px;border:1px solid #2c6e3f;font-size:12px;background:#e8f5ed;color:#2c6e3f">'+s+' x</div>';
+    }).join('') || '<div style="font-size:11px;color:#888;padding:4px">ninguno</div>';
+    return '<tr>'+
+      '<td>'+r.fecha+'</td>'+
+      '<td>'+r.dia_semana+'</td>'+
+      '<td>'+(r.distancia_km||'--')+'</td>'+
+      '<td><div style="display:flex;gap:12px;align-items:flex-start">'+
+        '<div><div style="font-size:10px;color:#888;margin-bottom:4px;text-transform:uppercase">Click para agregar</div>'+
+        '<div id="rs-avail-'+r.fecha+'">'+leftItems+'</div></div>'+
+        '<div style="font-size:16px;color:#888;padding-top:22px">&#8594;</div>'+
+        '<div><div style="font-size:10px;color:#2c6e3f;margin-bottom:4px;text-transform:uppercase">Seleccionados</div>'+
+        '<div id="rs-sel-'+r.fecha+'">'+rightItems+'</div></div>'+
+      '</div></td>'+
+      '<td><button id="rs-btn-'+r.fecha+'" onclick="saveRastraSectors(\''+r.fecha+'\''+')" style="font-size:12px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;border-radius:5px">Guardar</button></td>'+
+      '</tr>';
+  }).join('');
+}
+
+function rsMoveIn(fecha, sector) {
+  if (!rastraSectorData[fecha]) rastraSectorData[fecha] = [];
+  if (rastraSectorData[fecha].indexOf(sector) < 0) rastraSectorData[fecha].push(sector);
+  renderRastraSectorAssign();
+}
+
+function rsMoveOut(fecha, sector) {
+  if (!rastraSectorData[fecha]) return;
+  rastraSectorData[fecha] = rastraSectorData[fecha].filter(function(s) { return s !== sector; });
+  renderRastraSectorAssign();
+}
+
+async function saveRastraSectors(fecha) {
+  var selected = (rastraSectorData[fecha] || []).filter(Boolean);
+  var btn = document.getElementById('rs-btn-'+fecha);
+  btn.disabled = true; btn.textContent = '...';
+  await fetch(API + '/rastra_sector_assign', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({fecha: fecha, sectors: selected})
+  });
+  await loadRastraSectorData();
+  renderRastraSectorAssign();
+  btn.textContent = 'Guardado';
+  setTimeout(function() { btn.disabled = false; btn.textContent = 'Guardar'; }, 1500);
+}
+
+// Tab switching handled in main showTab function
+
+// Initial load
+Promise.all([loadAlmuerzoData(), loadRastraSectorData()]).then(function() {
+  renderAlmuerzo();
+  renderRastraSectorAssign();
 });
 </script>

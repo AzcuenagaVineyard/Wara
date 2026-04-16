@@ -68,6 +68,65 @@ class Handler(BaseHTTPRequestHandler):
             conn.commit()
             conn.close()
             self.send_json({"ok": True, "fecha": fecha, "tag": tag})
+
+        elif path == "/almuerzo":
+            rows = query("""
+                SELECT s.fecha, d.dia_semana, s.hora, s.duracion_min, s.lugar_raw,
+                    COALESCE(a.sector, '') as sector_tag,
+                    COALESCE(a.nota, '') as nota
+                FROM detenciones s
+                JOIN daily_summary d ON s.fecha = d.fecha
+                LEFT JOIN almuerzo_tag a ON s.fecha = a.fecha
+                WHERE s.hora >= '10:45' AND s.hora <= '14:30'
+                AND s.duracion_min >= 20
+                AND s.id = (
+                    SELECT id FROM detenciones
+                    WHERE fecha = s.fecha AND hora >= '10:45' AND hora <= '14:30'
+                    AND duracion_min >= 20
+                    ORDER BY duracion_min DESC LIMIT 1
+                )
+                ORDER BY s.fecha DESC
+            """)
+            self.send_json(rows)
+
+        elif path == "/rastra_sectors_assigned":
+            rows = query("""
+                SELECT fecha, sector FROM rastra_sector ORDER BY fecha DESC, sector
+            """)
+            self.send_json(rows)
+
+
+        elif path == "/almuerzo_tag":
+            fecha  = data.get("fecha", "").strip()
+            sector = data.get("sector", "").strip()
+            nota   = data.get("nota", "").strip()
+            if not fecha:
+                self.send_json({"error": "fecha required"}, 400)
+                return
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute(
+                "INSERT OR REPLACE INTO almuerzo_tag (fecha, sector, nota) VALUES (?,?,?)",
+                (fecha, sector, nota)
+            )
+            conn.commit()
+            conn.close()
+            self.send_json({"ok": True})
+
+        elif path == "/rastra_sector_assign":
+            fecha   = data.get("fecha", "").strip()
+            sectors = data.get("sectors", [])
+            if not fecha:
+                self.send_json({"error": "fecha required"}, 400)
+                return
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute("DELETE FROM rastra_sector WHERE fecha=?", (fecha,))
+            for s in sectors:
+                if s:
+                    conn.execute("INSERT OR IGNORE INTO rastra_sector (fecha, sector) VALUES (?,?)", (fecha, s))
+            conn.commit()
+            conn.close()
+            self.send_json({"ok": True})
+
         else:
             self.send_json({"error": "Not found"}, 404)
 
@@ -156,6 +215,33 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 GROUP BY d.sector ORDER BY total_min DESC
             """))
+
+
+        elif path == "/almuerzo":
+            rows = query("""
+                SELECT s.fecha, d.dia_semana, s.hora, s.duracion_min, s.lugar_raw,
+                    COALESCE(a.sector, '') as sector_tag,
+                    COALESCE(a.nota, '') as nota
+                FROM detenciones s
+                JOIN daily_summary d ON s.fecha = d.fecha
+                LEFT JOIN almuerzo_tag a ON s.fecha = a.fecha
+                WHERE s.hora >= '10:45' AND s.hora <= '14:30'
+                AND s.duracion_min >= 20
+                AND s.id = (
+                    SELECT id FROM detenciones
+                    WHERE fecha = s.fecha AND hora >= '10:45' AND hora <= '14:30'
+                    AND duracion_min >= 20
+                    ORDER BY duracion_min DESC LIMIT 1
+                )
+                ORDER BY s.fecha DESC
+            """)
+            self.send_json(rows)
+
+        elif path == "/rastra_sectors_assigned":
+            rows = query("""
+                SELECT fecha, sector FROM rastra_sector ORDER BY fecha DESC, sector
+            """)
+            self.send_json(rows)
 
         else:
             self.send_json({"error": "Not found"}, 404)
