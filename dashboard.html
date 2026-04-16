@@ -942,71 +942,52 @@ async function exportSnapshot() {
   var btn = document.getElementById('export-btn');
   btn.disabled = true;
   btn.textContent = 'Generando...';
-
   try {
-    // Fetch all data
-    const [sumRes, stopRes, rastraRes, almRes] = await Promise.all([
-      fetch(API + '/summary'),
-      fetch(API + '/stops'),
-      fetch(API + '/rastra'),
-      fetch(API + '/almuerzo')
+    var results = await Promise.all([
+      fetch(API + '/summary').then(function(r){return r.json();}),
+      fetch(API + '/stops').then(function(r){return r.json();}),
+      fetch(API + '/rastra').then(function(r){return r.json();}),
+      fetch(API + '/almuerzo').then(function(r){return r.json();})
     ]);
-    const summarySnap = await sumRes.json();
-    const stopsSnap   = await stopRes.json();
-    const rastraSnap  = await rastraRes.json();
-    const almSnap     = await almRes.json();
+    var summarySnap = results[0];
+    var stopsSnap   = results[1];
+    var rastraSnap  = results[2];
+    var almSnap     = results[3];
 
-    // Get current dashboard HTML
-    const resp    = await fetch(window.location.href);
-    var html      = await resp.text();
-    const snapDate = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+    var snapDate = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+    var dataScript = '<script>window.SNAPSHOT_DATA={summary:' +
+      JSON.stringify(summarySnap) + ',stops:' +
+      JSON.stringify(stopsSnap) + ',rastra:' +
+      JSON.stringify(rastraSnap) + ',almuerzo:' +
+      JSON.stringify(almSnap) + '};' +
+      'window.fetch=(function(orig){return function(url){' +
+      'if(url&&url.includes("localhost:8765")){' +
+      'var p=url.replace(/.*localhost:8765/,"");' +
+      'var d=window.SNAPSHOT_DATA;' +
+      'if(p==="/summary")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.summary);}});' +
+      'if(p==="/stops")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.stops);}});' +
+      'if(p==="/rastra")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.rastra);}});' +
+      'if(p==="/almuerzo")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.almuerzo);}});' +
+      'return Promise.resolve({ok:true,json:function(){return Promise.resolve([]);}});' +
+      '}return orig.apply(this,arguments);};})(window.fetch);' +
+      '<\/script>';
 
-    // Replace the API fetch with inline data
-    const inlineData = `
-const API = 'http://localhost:8765';
-const SNAPSHOT_MODE = true;
-const SNAPSHOT_DATE = '${snapDate}';
-const SNAPSHOT_DATA = {
-  summary: ${JSON.stringify(summarySnap)},
-  stops:   ${JSON.stringify(stopsSnap)},
-  rastra:  ${JSON.stringify(rastraSnap)},
-  almuerzo:${JSON.stringify(almSnap)}
-};
+    var resp = await fetch(window.location.href);
+    var html = await resp.text();
 
-// Override fetch for snapshot mode
-const _realFetch = window.fetch;
-window.fetch = function(url) {
-  if (url && url.includes('localhost:8765')) {
-    var path = url.replace(/.*localhost:8765/, '');
-    if (path === '/summary') return Promise.resolve({ok:true, json:()=>Promise.resolve(SNAPSHOT_DATA.summary)});
-    if (path === '/stops')   return Promise.resolve({ok:true, json:()=>Promise.resolve(SNAPSHOT_DATA.stops)});
-    if (path === '/rastra')  return Promise.resolve({ok:true, json:()=>Promise.resolve(SNAPSHOT_DATA.rastra)});
-    if (path === '/almuerzo')return Promise.resolve({ok:true, json:()=>Promise.resolve(SNAPSHOT_DATA.almuerzo)});
-    if (path === '/rastra_stops') return Promise.resolve({ok:true, json:()=>Promise.resolve([])});
-    if (path === '/rastra_sectors_assigned') return Promise.resolve({ok:true, json:()=>Promise.resolve([])});
-    return Promise.resolve({ok:true, json:()=>Promise.resolve({})});
-  }
-  return _realFetch.apply(this, arguments);
-};
-`;
+    // Insert data script right after <head>
+    html = html.replace('<head>', '<head>' + dataScript);
 
-    // Inject as a separate script tag before the main scripts
-    html = html.replace('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js', '<script>' + inlineData + '</script>\n<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js');
-
-    // Update title and add snapshot banner
+    // Add snapshot badge
     html = html.replace(
       '<h1>New Holland TT3880F</h1>',
       '<h1>New Holland TT3880F</h1><span style="font-size:11px;background:#e8f5ed;color:#2c6e3f;padding:3px 8px;border-radius:4px;margin-left:8px">Snapshot ' + snapDate + '</span>'
     );
 
-    // Remove export button from snapshot
-    html = html.replace(
-      /<button id="export-btn"[^>]*>Exportar snapshot<\/button>/,
-      ''
-    );
+    // Remove export button
+    html = html.replace(/id="export-btn"[^>]*>[^<]*<\/button>/, 'id="export-btn" style="display:none">');
 
-    // Download the file
-    var blob = new Blob([html], {type: 'text/html'});
+    var blob = new Blob([html], {type:'text/html'});
     var url  = URL.createObjectURL(blob);
     var a    = document.createElement('a');
     a.href     = url;
@@ -1020,7 +1001,7 @@ window.fetch = function(url) {
     setTimeout(function() { btn.disabled = false; btn.textContent = 'Exportar snapshot'; }, 2000);
   } catch(e) {
     console.error('Export error', e);
-    btn.textContent = 'Error — intentá de nuevo';
+    btn.textContent = 'Error';
     setTimeout(function() { btn.disabled = false; btn.textContent = 'Exportar snapshot'; }, 3000);
   }
 }
