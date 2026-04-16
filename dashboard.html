@@ -1003,7 +1003,7 @@ async function exportSnapshot() {
     var url  = URL.createObjectURL(blob);
     var a    = document.createElement('a');
     a.href     = url;
-    a.download = 'WARA_snapshot_' + snapDate.replace(/\//g,'-') + '.html';
+    a.download = 'snapshot.html';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1060,7 +1060,7 @@ async function exportAndPublish() {
     html = html.replace(/id="export-btn"[^>]*>[^<]*<\/button>/, 'id="export-btn" style="display:none">');
     html = html.replace(/id="publish-btn"[^>]*>[^<]*<\/button>/, 'id="publish-btn" style="display:none">');
 
-    var filename = 'WARA_snapshot_' + snapDate.replace(/\//g,'-') + '.html';
+    var filename = 'snapshot.html';
 
     // Save to WARA folder via server
     btn.textContent = '2/2 Publicando en GitHub...';
