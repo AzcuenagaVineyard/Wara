@@ -350,17 +350,24 @@ async function fetchData() {
     DB.stops   = await stopRes.json();
     document.getElementById('status-dot').className = 'ok';
     document.getElementById('db-info').textContent =
-      `${DB.summary.length} días registrados — último: ${DB.summary[DB.summary.length-1]?.fecha || '—'}`;
+      DB.summary.length + ' dias registrados — ultimo: ' + (DB.summary[DB.summary.length-1]?.fecha || '—');
     document.getElementById('loading').style.display = 'none';
     renderAll();
   } catch(e) {
-    document.getElementById('status-dot').className = 'err';
     document.getElementById('loading').style.display = 'none';
-    const el = document.getElementById('error-msg');
-    el.style.display = 'block';
-    el.innerHTML = `<b>No se pudo conectar al servidor local.</b><br>
-      Ejecutá en la terminal: <code>python3 server_wara.py</code><br>
-      Luego recargá esta página.<br><small>${e.message}</small>`;
+    if (window.SNAPSHOT_DATA) {
+      DB.summary = window.SNAPSHOT_DATA.summary || [];
+      DB.stops   = window.SNAPSHOT_DATA.stops   || [];
+      document.getElementById('status-dot').className = 'ok';
+      document.getElementById('db-info').textContent =
+        DB.summary.length + ' dias registrados (snapshot)';
+      renderAll();
+    } else {
+      document.getElementById('status-dot').className = 'err';
+      const el = document.getElementById('error-msg');
+      el.style.display = 'block';
+      el.innerHTML = '<b>No se pudo conectar al servidor local.</b><br>Ejecuta en la terminal: <code>python3 server_wara.py</code><br>Luego recarga esta pagina.';
+    }
   }
 }
 
@@ -371,7 +378,7 @@ function renderAll() {
   renderResumen();
   renderDiario();
   renderInactividad();
-  renderRastra();
+  if (typeof renderRastra === 'function') renderRastra();
   renderSectores();
   renderPatrones();
 }
