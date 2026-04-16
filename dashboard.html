@@ -954,19 +954,22 @@ async function exportSnapshot() {
       fetch(API + '/summary').then(function(r){return r.json();}),
       fetch(API + '/stops').then(function(r){return r.json();}),
       fetch(API + '/rastra').then(function(r){return r.json();}),
-      fetch(API + '/almuerzo').then(function(r){return r.json();})
+      fetch(API + '/almuerzo').then(function(r){return r.json();}),
+      fetch(API + '/rastra_sectors_assigned').then(function(r){return r.json();})
     ]);
-    var summarySnap = results[0];
-    var stopsSnap   = results[1];
-    var rastraSnap  = results[2];
-    var almSnap     = results[3];
+    var summarySnap  = results[0];
+    var stopsSnap    = results[1];
+    var rastraSnap   = results[2];
+    var almSnap      = results[3];
+    var sectorsSnap  = results[4];
 
     var snapDate = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
     var dataScript = '<script>window.SNAPSHOT_DATA={summary:' +
       JSON.stringify(summarySnap) + ',stops:' +
       JSON.stringify(stopsSnap) + ',rastra:' +
       JSON.stringify(rastraSnap) + ',almuerzo:' +
-      JSON.stringify(almSnap) + '};' +
+      JSON.stringify(almSnap) + ',rastra_sectors:' +
+      JSON.stringify(sectorsSnap) + '};' +
       'window.fetch=(function(orig){return function(url){' +
       'if(url&&url.includes("localhost:8765")){' +
       'var p=url.replace(/.*localhost:8765/,"");' +
@@ -975,6 +978,7 @@ async function exportSnapshot() {
       'if(p==="/stops")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.stops);}});' +
       'if(p==="/rastra")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.rastra);}});' +
       'if(p==="/almuerzo")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.almuerzo);}});' +
+      'if(p==="/rastra_sectors_assigned")return Promise.resolve({ok:true,json:function(){return Promise.resolve(d.rastra_sectors);}});' +
       'return Promise.resolve({ok:true,json:function(){return Promise.resolve([]);}});' +
       '}return orig.apply(this,arguments);};})(window.fetch);' +
       '<\/script>';
