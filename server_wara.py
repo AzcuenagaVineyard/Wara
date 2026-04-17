@@ -127,6 +127,46 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             self.send_json({"ok": True})
 
+        elif path == "/save_snapshot":
+            filename = data.get("filename", "").strip()
+            html     = data.get("content", "")
+            if not filename or not html:
+                self.send_json({"error": "filename and content required"}, 400)
+                return
+            # Safety check - only allow snapshot filenames
+            if not filename.endswith(".html") or "/" in filename or "\\" in filename:
+                self.send_json({"error": "Invalid filename"}, 400)
+                return
+            snap_path = Path(__file__).parent / filename
+            snap_path.write_text(html, encoding='utf-8')
+            self.send_json({"ok": True, "path": str(snap_path)})
+
+        elif path == "/publish":
+            import subprocess, datetime
+            try:
+                wara_dir = Path(__file__).parent
+                # Find most recent snapshot file
+                snap = wara_dir / "snapshot.html"
+                if not snap.exists():
+                    self.send_json({"error": "No snapshot file found — click Exportar snapshot first"}, 400)
+                    return
+                # Git add, commit, push
+                today = datetime.date.today().strftime("%d-%m-%Y")
+                cmds = [
+                    ["git", "-C", str(wara_dir), "add", "dashboard.html", "snapshot.html"],
+                    ["git", "-C", str(wara_dir), "commit", "-m", f"Update snapshot {today}"],
+                    ["git", "-C", str(wara_dir), "push"],
+                ]
+                for cmd in cmds:
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if result.returncode != 0 and "nothing to commit" not in result.stdout + result.stderr:
+                        self.send_json({"error": result.stderr or result.stdout}, 500)
+                        return
+                self.send_json({"ok": True, "snapshot": "snapshot.html",
+                    "url": "https://azcuenagavineyard.github.io/Wara/snapshot.html"})
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+
         else:
             self.send_json({"error": "Not found"}, 404)
 
